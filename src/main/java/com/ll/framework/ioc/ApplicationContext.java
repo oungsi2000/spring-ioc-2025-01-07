@@ -1,15 +1,16 @@
 package com.ll.framework.ioc;
 
+import com.ll.framework.ioc.annotations.Component;
+import com.ll.framework.ioc.annotations.Service;
 import javassist.tools.reflect.CannotCreateException;
+import org.reflections.Reflections;
+import org.reflections.scanners.Scanners;
 
 import java.lang.reflect.Constructor;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Stream;
 
 public class ApplicationContext {
@@ -27,30 +28,18 @@ public class ApplicationContext {
     public <T> T genBean(String beanName) {
         if (context.get(beanName) != null) { return (T) context.get(beanName); }
         String fullDirName =  beanName.substring(0,1).toUpperCase() + beanName.substring(1);
-        try {
-            //TODO main과 test경로 모두를 포함하여 처리 (별도의 메서드로 분리)
-            StringBuilder rawPath = new StringBuilder(baseUri);
-            for (String item : basePackage.split("\\.")) {
-                rawPath.append("/");
-                rawPath.append(item);
-            }
-            Path currentDir = Paths.get(rawPath.toString());
-            List<String> files;
 
+        Reflections reflectionsAll = new Reflections(basePackage, Scanners.TypesAnnotated); // your.root.package 하위의 모든 패키지 스캔
+        Set<Class<?>> annotatedClassesAll = reflectionsAll.getTypesAnnotatedWith(Component.class);
+
+        try {
+            List<String> files;
             //TODO beanName 과 일치하는 경로를 동적으로 찾는 부분을 메서드 분리
-            try (Stream<Path> walk = Files.walk(currentDir)) {
-                files = walk.filter(Files::isRegularFile) // 파일만 필터링
-                    .map(
-                        dir -> dir.toString()
-                            .replace(baseUri+"/", "")
-                            .replace(".java", "")
-                            .replace("/", ".")
-                    )
-                    .filter(
-                        dir-> dir.contains(fullDirName)
-                    )
-                    .toList();
-            }
+            files = annotatedClassesAll.stream()
+                .map(Class::getName)
+                .filter(name -> name.contains(fullDirName))
+                .toList();
+
             //만약 의존 객체를 프로젝트 디렉토리에서 찾을 수 없다면 BaseCreateExcpetion 처리
             if (files.getFirst() == null)  {throw new CannotCreateException("클래스 " + fullDirName + " 를 찾을 수 없습니다"); }
 
